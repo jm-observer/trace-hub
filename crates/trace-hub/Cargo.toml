@@ -1,0 +1,22 @@
+[package]
+name = "trace-hub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Standalone lifecycle-trace backend: span ingest, SQLite storage, query API and web UI"
+
+[[bin]]
+name = "trace-hub"
+path = "src/main.rs"
+
+[dependencies]
+trace-model = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+env_logger = { workspace = true }

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>trace-hub</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --fg:#d7dbe3; --mut:#8b93a3;
+          --ok:#3fb950; --err:#f85149; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 ui-monospace,Consolas,Menlo,monospace; background:var(--bg); color:var(--fg); }
+  header { padding:8px 14px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  header b { color:var(--accent); }
+  #grid { display:grid; grid-template-columns:300px 1fr 1fr; height:calc(100vh - 41px); }
+  .col { overflow:auto; padding:8px; }
+  #list { border-right:1px solid var(--line); }
+  #tree { border-right:1px solid var(--line); }
+  input { background:var(--panel); border:1px solid var(--line); color:var(--fg); padding:5px 8px; border-radius:5px; width:100%; }
+  .trace-item { padding:7px 8px; border:1px solid var(--line); border-radius:6px; margin:6px 0; cursor:pointer; }
+  .trace-item:hover { border-color:var(--accent); }
+  .trace-item .t { font-weight:600; }
+  .trace-item .m { color:var(--mut); font-size:11px; }
+  .node { margin:2px 0; }
+  .node-row { padding:4px 6px; border-radius:5px; cursor:pointer; display:flex; gap:8px; align-items:center; }
+  .node-row:hover { background:var(--panel); }
+  .node-row.sel { background:#1f2733; outline:1px solid var(--accent); }
+  .kind { font-size:10px; padding:1px 6px; border-radius:10px; background:#222b3a; color:var(--accent); white-space:nowrap; }
+  .flow > .node-row .kind { background:#2a2030; color:#d2a8ff; }
+  .sum { color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dur { color:var(--mut); margin-left:auto; white-space:nowrap; }
+  .st-ok { color:var(--ok); } .st-err { color:var(--err); }
+  .children { margin-left:16px; border-left:1px dashed var(--line); padding-left:8px; }
+  .caret { width:12px; display:inline-block; color:var(--mut); cursor:pointer; }
+  .link-tag { font-size:10px; color:#d2a8ff; }
+  #detail h3 { margin:6px 0; color:var(--accent); }
+  table.kv { border-collapse:collapse; width:100%; }
+  table.kv td { border:1px solid var(--line); padding:3px 7px; vertical-align:top; }
+  table.kv td.k { color:var(--mut); width:160px; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .muted { color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <b>trace-hub</b>
+  <span class="muted" id="status"></span>
+</header>
+<div id="grid">
+  <div class="col" id="list">
+    <input id="q" placeholder="搜索 service/kind/概要…回车" />
+    <div id="traces"></div>
+  </div>
+  <div class="col" id="tree"><div class="muted">← 选择一条 trace</div></div>
+  <div class="col" id="detail"><div class="muted">选择一个节点查看详情</div></div>
+</div>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, c) => { const e=document.createElement(t); if(c) e.className=c; return e; };
+const esc = s => String(s).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+
+// ── kind → 渲染器：summary(节点行内文本)，detail(右栏 HTML)。未注册走通用兜底。──
+const RENDERERS = {
+  llm_call: {
+    summary: n => `${n.summary.model ?? 'llm'} · ${n.summary.dur_ms ?? '?'}ms`,
+    detail: (n, d) => bodyBlock('request', d.request_body) + bodyBlock('response', d.response_body) + jsonBlock('detail', d.detail),
+  },
+  alarm_submit: {
+    summary: n => `⏰ ${n.summary.once_at ?? n.summary.cron ?? ''} ${n.summary.name ?? ''}`,
+    detail: (n, d) => jsonBlock('detail', d.detail),
+  },
+  user_message: { summary: n => n.summary.text ?? '(消息)' },
+  delivery: { summary: n => `→ ${n.summary.channel ?? ''} ${n.summary.recipient ?? ''}` },
+};
+function summaryText(n) {
+  const r = RENDERERS[n.kind];
+  if (r && r.summary) { try { return r.summary(n); } catch(e){} }
+  return kvInline(n.summary); // 通用兜底：概要 KV 平铺
+}
+function detailHtml(n, d) {
+  const r = RENDERERS[n.kind];
+  let html = '';
+  html += '<h3>概要</h3>' + kvTable(n.summary);
+  if (r && r.detail) { try { html += r.detail(n, d); return html; } catch(e){} }
+  // 通用兜底：detail 原始 JSON + body dump
+  html += bodyBlock('request', d.request_body) + bodyBlock('response', d.response_body) + jsonBlock('detail', d.detail);
+  return html;
+}
+
+function kvInline(o){ if(!o||typeof o!=='object') return esc(o ?? ''); return Object.entries(o).map(([k,v])=>`${esc(k)}=${esc(typeof v==='object'?JSON.stringify(v):v)}`).join(' · '); }
+function kvTable(o){ if(!o||typeof o!=='object') return `<pre>${esc(JSON.stringify(o))}</pre>`; let r='<table class="kv">'; for(const [k,v] of Object.entries(o)) r+=`<tr><td class="k">${esc(k)}</td><td>${esc(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`; return r+'</table>'; }
+function jsonBlock(t,v){ if(v==null||(typeof v==='object'&&!Object.keys(v).length)) return ''; return `<h3>${t}</h3><pre>${esc(JSON.stringify(v,null,2))}</pre>`; }
+function bodyBlock(t,v){ if(v==null) return ''; return `<h3>body · ${t}</h3><pre>${esc(v)}</pre>`; }
+
+async function api(p){ const r = await fetch(p); if(!r.ok) throw new Error(p+' → '+r.status); return r.json(); }
+
+let curTrace = null;
+async function loadList(){
+  const q = $('#q').value.trim();
+  const { traces } = await api('/v1/traces' + (q?('?q='+encodeURIComponent(q)):''));
+  const box = $('#traces'); box.innerHTML='';
+  $('#status').textContent = traces.length + ' traces';
+  for(const t of traces){
+    const it = el('div','trace-item');
+    it.innerHTML = `<div class="t">${esc(t.title ?? t.root_kind ?? t.trace_id)}</div>`+
+      `<div class="m">${esc(t.root_service??'')} · ${t.span_count} spans · ${esc(t.trace_id.slice(0,12))}…</div>`;
+    it.onclick = () => loadTree(t.trace_id);
+    box.appendChild(it);
+  }
+}
+
+async function loadTree(traceId){
+  curTrace = traceId;
+  const { nodes } = await api('/v1/traces/'+encodeURIComponent(traceId));
+  const byId = new Map(nodes.map(n=>[n.span_id,n]));
+  const kids = new Map();
+  const roots = [];
+  for(const n of nodes){
+    if(n.parent_span_id && byId.has(n.parent_span_id)){
+      if(!kids.has(n.parent_span_id)) kids.set(n.parent_span_id,[]);
+      kids.get(n.parent_span_id).push(n);
+    } else roots.push(n);
+  }
+  const t0 = Math.min(...nodes.map(n=>n.start_ms));
+  const tree = $('#tree'); tree.innerHTML='';
+  for(const r of roots) tree.appendChild(renderNode(r, kids, t0));
+}
+
+function renderNode(n, kids, t0){
+  const children = kids.get(n.span_id) || [];
+  const isFlow = children.length>0;
+  const wrap = el('div', 'node' + (isFlow?' flow':''));
+  const row = el('div','node-row');
+  const caret = el('span','caret'); caret.textContent = isFlow?'▾':'·';
+  const kind = el('span','kind'); kind.textContent = n.flow_name ? n.flow_name : n.kind;
+  const sum = el('span','sum'); sum.textContent = summaryText(n);
+  const dur = el('span','dur');
+  const st = n.status==='ok' ? '<span class="st-ok">ok</span>' : '<span class="st-err">err</span>';
+  dur.innerHTML = `${st} · +${n.start_ms - t0}ms · ${Math.max(0,n.end_ms-n.start_ms)}ms` +
+    (n.links && n.links.length ? ` · <span class="link-tag">⇄link</span>`:'');
+  row.append(caret, kind, sum, dur);
+  row.onclick = (e)=>{ if(e.target===caret) return; selectNode(row, n); };
+  wrap.appendChild(row);
+  if(isFlow){
+    const box = el('div','children');
+    for(const c of children) box.appendChild(renderNode(c, kids, t0));
+    wrap.appendChild(box);
+    caret.onclick = ()=>{ const h = box.style.display==='none'; box.style.display = h?'':'none'; caret.textContent = h?'▾':'▸'; };
+  }
+  return wrap;
+}
+
+let selRow = null;
+async function selectNode(row, n){
+  if(selRow) selRow.classList.remove('sel');
+  selRow = row; row.classList.add('sel');
+  const panel = $('#detail');
+  let d = { detail:null, request_body:null, response_body:null };
+  if(n.has_detail){ try { d = await api('/v1/spans/'+encodeURIComponent(n.span_id)); } catch(e){} }
+  panel.innerHTML = `<div class="m muted">${esc(n.service)} / ${esc(n.kind)} / span ${esc(n.span_id.slice(0,12))}…`+
+    `${n.body_truncated?' · <span class="st-err">body 截断</span>':''}</div>` + detailHtml(n, d);
+}
+
+$('#q').addEventListener('keydown', e=>{ if(e.key==='Enter') loadList(); });
+loadList().catch(e=> $('#status').textContent = '加载失败: '+e.message);
+</script>
+</body>
+</html>
