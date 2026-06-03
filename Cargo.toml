@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/trace-model", "crates/trace-hub"]
+members = ["crates/trace-hub"]
 resolver = "2"
 
 [workspace.package]
@@ -9,18 +9,21 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/jm-observer/trace-hub"
 
 [workspace.dependencies]
-# 共享契约（客户端与后端的单一事实源）
-trace-model = { path = "crates/trace-model" }
+# Linux 部署栈 + 日志服务 + trace 数据契约（原 trace-model 已内联进 custom-utils）：
+# 自更新 + rootless systemd 安装 + workspace 解析 + 看门狗 + flexi_logger + span/trace 模型。
+# libsystemd 由 custom-utils 按 target 门控，非 Linux 自动缺省。`prod` feature（见各 crate）
+# 决定日志落盘 vs 控制台。`trace` feature 提供 SpanRecord/IngestRequest 等契约类型。
+custom-utils = { path = "../custom-utils", default-features = false, features = ["updater", "logger", "trace"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
-env_logger = "0.11"
 
 [profile.release]
 strip = true

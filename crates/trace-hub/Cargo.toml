@@ -11,7 +11,7 @@ name = "trace-hub"
 path = "src/main.rs"
 
 [dependencies]
-trace-model = { workspace = true }
+custom-utils = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true }
@@ -19,4 +19,9 @@ axum = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-env_logger = { workspace = true }
+toml = { workspace = true }
+
+[features]
+# 生产部署：日志落盘到 ~/log/trace-hub（轮转）+ ~/etc/trace-hub.toml 动态级别。
+# 不开启则日志彩色输出到 stdout（journald 友好，适合本地调试）。
+prod = ["custom-utils/prod"]

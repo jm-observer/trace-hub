@@ -7,7 +7,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
-use trace_model::IngestRequest;
+use custom_utils::trace::IngestRequest;
 
 use crate::error::AppError;
 use crate::storage::Storage;

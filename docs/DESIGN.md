@@ -26,7 +26,7 @@
 
 | 部件 | 位置 | 状态 |
 |---|---|---|
-| 共享契约 `trace-model` | `trace-hub/crates/trace-model` | ✅ 已建（SpanRecord/TraceContext/traceparent） |
+| 共享契约 `trace` model | `custom-utils/src/util_trace/model`（`custom_utils::trace`） | ✅ 已建（SpanRecord/TraceContext/traceparent，原 trace-model 已内联） |
 | 后端 `trace-hub` | `trace-hub/crates/trace-hub` | ✅ ingest + SQLite + query API（端到端冒烟通过） |
 | 客户端 `trace` feature | `custom-utils`（路线 B） | ✅ 已建（init/record_span/record_llm_call/inject/extract，9 测试绿） |
 | Web UI | `web/`（Vite+React+**React Flow**）→ 构建产单文件内联到 `crates/trace-hub/src/ui/index.html`，路由 `/` | ✅ 流程图（节点=span/实线=父子/虚线=跨trace link，按 kind 上色+状态着色）+ 列表+搜索+点节点详情(含 body)。`vite-plugin-singlefile` 保「单二进制+离线自包含」 |
@@ -47,7 +47,7 @@ turn trace 下）。zero 用 `[patch."…zero-nova.git"]` 指向本地改造 nov
 
 ## 3. 核心模型：一棵「流程树」
 
-**一个 `trace_id` = 一条完整生命周期 = 一棵树。** 详见 `trace-model` 的 doc。
+**一个 `trace_id` = 一条完整生命周期 = 一棵树。** 详见 `custom_utils::trace`（`util_trace::model`）的 doc。
 
 - **主流程**=树根 span；**子流程**=有子节点的中间 span（带 `flow_name`，如「闹钟设置」）；
   **节点**=叶子 span。三者同为 `SpanRecord`，靠 `span_id`/`parent_span_id` 建树。
@@ -107,15 +107,16 @@ turn trace 下）。zero 用 `[patch."…zero-nova.git"]` 指向本地改造 nov
 
 ## 7. 待定项（施工中逐个敲定）
 
-1. **trace-model 分发**：当前 `path` 依赖；custom-utils 为已发布 crate，接入 `trace`
-   feature 时需把 trace-model 改为 git-tag 依赖（参照 zero-nova 模式）。
+1. ✅ **契约分发**：原独立 `trace-model` crate 已内联进 `custom-utils 0.15` 的 `trace`
+   feature（`custom_utils::trace`），避免 crates.io 禁 path/git 依赖的发布障碍。trace-hub 经
+   workspace `path` 依赖该 feature。
 2. 概要由客户端装好（推荐）vs 后端派生 —— 当前定为客户端装好。
 3. 子流程边界：结构自然形成（推荐）vs 显式 `start_flow()` —— 当前定为结构 + `flow_name`。
 4. UI 先做折叠树还是时间轴瀑布。
 5. 服务名/时钟对齐（跨机时间线）/ body 默认全量 vs 截断。
 6. **【阻塞第 4 步】依赖分发**：zero / alarm-server / douyin 均经 crates.io 版本依赖
    `custom-utils 0.14.x`，拿不到本地的 `trace` feature。三选一：
-   - **A 发布**：发布 `trace-model` + `custom-utils 0.15`（含 trace），三服务 bump 版本 + 开
+   - **A 发布**：发布 `custom-utils 0.15`（已内联 trace 契约 + trace feature），三服务 bump 版本 + 开
      `trace` feature。最正规，但需 crates.io 发布 + 协调 zero-nova（git-tag 钉住 custom-utils）。
    - **B 临时 path/git 依赖**：三服务 `custom-utils` 改指本地 path/git（含 trace）。最快，
      但改了生产依赖来源、可能影响各自 CI。可逆。
@@ -129,7 +130,7 @@ turn trace 下）。zero 用 `[patch."…zero-nova.git"]` 指向本地改造 nov
 
 ## 施工顺序
 
-1. ✅ trace-hub 脚手架 + `trace-model` 契约
+1. ✅ trace-hub 脚手架 + `trace` 契约（内联于 `custom_utils::trace`）
 2. ✅ trace-hub 后端：ingest + SQLite + query API
 3. ✅ custom-utils `trace` feature（路线 B 客户端）
 5. ✅ Web UI（流程树 + 概要→详情）—— 内嵌单页，路由 `/`

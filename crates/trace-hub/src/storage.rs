@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use rusqlite::{params, Connection};
-use trace_model::{SpanLink, SpanRecord};
+use custom_utils::trace::{SpanLink, SpanRecord};
 
 use crate::views::{DetailView, NodeView, TraceSummary};
 
@@ -331,7 +331,7 @@ fn parse_json(s: &str) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use trace_model::{SpanRecord, SpanStatus};
+    use custom_utils::trace::{SpanRecord, SpanStatus};
 
     fn mem() -> Storage {
         let conn = Connection::open_in_memory().unwrap();

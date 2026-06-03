@@ -13,9 +13,12 @@
 
 ```
 crates/
-  trace-model/   # 共享契约：SpanRecord / TraceContext / W3C traceparent（客户端与后端单一事实源）
   trace-hub/     # 后端：ingest + SQLite + query API + Web UI（建设中）
 ```
+
+> 共享契约（SpanRecord / TraceContext / IngestRequest / W3C traceparent）已内联进
+> `custom-utils` 的 `trace` feature（`custom_utils::trace`），作为客户端与后端的单一事实源；
+> 原独立 `trace-model` crate 已移除。
 
 ## 构建
 

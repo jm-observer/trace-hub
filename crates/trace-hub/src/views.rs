@@ -1,7 +1,7 @@
 //! query API 的响应视图类型。
 
 use serde::Serialize;
-use trace_model::SpanLink;
+use custom_utils::trace::SpanLink;
 
 /// 树节点视图：信封 + 概要（**不含 body / detail**），随整棵树一起返回。
 #[derive(Debug, Serialize)]
