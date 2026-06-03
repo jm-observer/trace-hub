@@ -1,0 +1,54 @@
+:root {
+  --bg: #0f1115; --panel: #171a21; --line: #262b36; --fg: #d7dbe3; --mut: #8b93a3;
+  --ok: #3fb950; --err: #f85149; --accent: #58a6ff; --flow: #d2a8ff;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font: 13px/1.5 ui-monospace, Consolas, Menlo, monospace;
+  background: var(--bg); color: var(--fg);
+}
+.app { display: grid; grid-template-columns: 290px 1fr 420px; height: 100vh; }
+.col { overflow: auto; }
+.sidebar { border-right: 1px solid var(--line); padding: 8px; }
+.detail { border-left: 1px solid var(--line); padding: 10px; }
+.graph { position: relative; }
+
+header { padding: 6px 4px 10px; display: flex; gap: 8px; align-items: center; }
+header b { color: var(--accent); }
+.muted { color: var(--mut); }
+input {
+  background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+  padding: 6px 8px; border-radius: 6px; width: 100%;
+}
+.trace-item { padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; margin: 6px 0; cursor: pointer; }
+.trace-item:hover { border-color: var(--accent); }
+.trace-item.sel { border-color: var(--accent); background: #1b2330; }
+.trace-item .t { font-weight: 600; }
+.trace-item .m { color: var(--mut); font-size: 11px; }
+
+/* ── React Flow 自定义节点 ── */
+.span-node {
+  width: 230px; min-height: 64px; padding: 7px 9px; border-radius: 9px;
+  background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  color: var(--fg); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.span-node.flow { border-left-color: var(--flow); }
+.span-node.err { border-left-color: var(--err); }
+.span-node.sel { outline: 2px solid var(--accent); }
+.sn-head { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.sn-kind { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #222b3a; color: var(--accent); white-space: nowrap; }
+.span-node.flow .sn-kind { background: #2a2030; color: var(--flow); }
+.sn-svc { font-size: 10px; color: var(--mut); }
+.sn-sum { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sn-meta { margin-top: 3px; font-size: 10px; color: var(--mut); }
+.sn-meta .ok { color: var(--ok); } .sn-meta .er { color: var(--err); }
+
+/* ── 详情面板 ── */
+.detail h3 { margin: 8px 0 4px; color: var(--accent); font-size: 13px; }
+table.kv { border-collapse: collapse; width: 100%; }
+table.kv td { border: 1px solid var(--line); padding: 3px 7px; vertical-align: top; word-break: break-word; }
+table.kv td.k { color: var(--mut); width: 150px; }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 40vh; }
+
+.react-flow__attribution { display: none; }

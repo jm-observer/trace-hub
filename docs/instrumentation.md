@@ -51,7 +51,20 @@ custom_utils::trace::init(custom_utils::trace::TraceConfig::new(
 
 > once vs cron 的 trace_id 选择见 DESIGN §3：once 续 `continued` 同 trace_id；cron 用新 trace_id + `SpanLink` 回指设置 span。
 
-## 3. douyin worker（github-commit-info/crates/douyin · 下载长任务）
+## 3. douyin worker（github-commit-info/crates/douyin · 下载长任务）✅ 已接入并 live 验证
+
+> 已落地（option B：workspace custom-utils 改 path + douyin 开 `trace` feature）。
+> worker 是**独立子进程**且 callback 由 daemon 维护循环可能**异步补发**，故 traceparent
+> 必须落盘存活到投递时——用 `<task_id>.trace` 侧文件（零侵入，不改三个 Job 结构）：
+> - `main.rs`：`TRACE_HUB_ENDPOINT` 设时 init（daemon + worker 子进程均接入）。
+> - `serve.rs::submit_job`：提取 `traceparent` 头 → `run_submit_job`。
+> - `lib.rs::run_submit_job`：提交后 `callback::write_trace` 落侧文件。
+> - `callback.rs`：`CallbackRecord.trace_context`（enqueue 时读侧文件）；`post_once` 注入
+>   回调头；`deliver` 成功记 `douyin_done`(flow_name="抖音任务完成"，once 续用同 trace_id)。
+> - 验证：单测侧文件→trace_context；live：pending callback → flush → trace-hub 收到同
+>   trace_id 的 douyin_done（parent=嵌入 span）。
+
+### 历史小结（旧版逐 Job 方案已弃用）
 
 | 位置 | 动作 | 产出 span |
 |---|---|---|

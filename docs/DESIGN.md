@@ -29,8 +29,21 @@
 | 共享契约 `trace-model` | `trace-hub/crates/trace-model` | ✅ 已建（SpanRecord/TraceContext/traceparent） |
 | 后端 `trace-hub` | `trace-hub/crates/trace-hub` | ✅ ingest + SQLite + query API（端到端冒烟通过） |
 | 客户端 `trace` feature | `custom-utils`（路线 B） | ✅ 已建（init/record_span/record_llm_call/inject/extract，9 测试绿） |
-| Web UI | `trace-hub`（内嵌 `src/ui/index.html`，路由 `/`） | ✅ 已建（列表+流程树+节点详情+kind 渲染器+通用兜底+搜索） |
-| 三服务埋点 | alarm-server ✅(option B path 依赖，live 验证跨异步同 trace) / douyin 🚧 / zero 🚧(缓，nova 耦合) | 进行中 |
+| Web UI | `web/`（Vite+React+**React Flow**）→ 构建产单文件内联到 `crates/trace-hub/src/ui/index.html`，路由 `/` | ✅ 流程图（节点=span/实线=父子/虚线=跨trace link，按 kind 上色+状态着色）+ 列表+搜索+点节点详情(含 body)。`vite-plugin-singlefile` 保「单二进制+离线自包含」 |
+| 三服务埋点 | alarm-server ✅ / douyin ✅ / zero ✅（方案 A，见下） | 完成 |
+
+**zero 接入（方案 A，不改 nova）**：LLM body 与工具出站请求都在 nova 内部，zero 仅有
+`OrchestrateTaskPromptHook` 接缝。故 zero 作为 trace **起点**：派发 alarm/douyin 子 Agent 时
+起一棵 trace、记 `agent_task` 根 span、注入 `[Trace] traceparent`；skill 把它抄进 callback
+baggage（alarm→`callback_body.metadata.traceparent` 已通；douyin→submit `params.traceparent`，
+douyin 代码已支持、待 tools.d/skill 接线）。依赖耦合用 `[patch.crates-io]` 整图重定向本地
+custom-utils 解决（无需改 zero-nova；**发布前移除 patch**）。
+
+**LLM body 进 trace 树（方案 B，用户后续显式选择，改了 nova）**：nova 新增
+`AppEvent::ProviderHttpTrace{request_body,response_body}`，每次 LLM 调用流完成后 emit；
+zero bridge-claw 消费它 → `record_llm_span`（kind=`llm_call`，body 进详情，挂在本轮
+turn trace 下）。zero 用 `[patch."…zero-nova.git"]` 指向本地改造 nova（发布前移除，
+需先发 nova 新 tag）。sps 仍可独立按 trace_id 关联，二者互补。
 
 ## 3. 核心模型：一棵「流程树」
 
@@ -109,13 +122,20 @@
    - **C 独立 trace 客户端 crate**：把客户端从 custom-utils 拆成独立小 crate，三服务直接依赖，
      绕开 custom-utils 发布与 zero-nova 耦合。与「客户端落 custom-utils」的原定决策相悖，备选。
 
+## 关联服务设计
+
+- **streaming-speech**（语音：asr-server Rust :8091 douyin 调 / cosyvoice Python TTS 容器 zero 英语教练调 / orchestrator WS 实时）接入设计见
+  `D:\git\streaming-speech\docs\tracing-design.md`：Phase1 asr-server 服务端埋点（asr_transcribe + audio_decode/vad_segment/asr_decode 子 span，转写文本作 body）+ douyin 注入 traceparent；Phase2 zero caller-side `tts` span；Phase3 cosyvoice Python 内部 / orchestrator WS。同步调用用 continued（非 span-link）。
+
 ## 施工顺序
 
 1. ✅ trace-hub 脚手架 + `trace-model` 契约
 2. ✅ trace-hub 后端：ingest + SQLite + query API
 3. ✅ custom-utils `trace` feature（路线 B 客户端）
 5. ✅ Web UI（流程树 + 概要→详情）—— 内嵌单页，路由 `/`
-4. 🚧 三服务埋点（zero / alarm-server / douyin）—— **阻塞于依赖分发决策（§7.6）**
+4. ✅ 三服务埋点（alarm-server / douyin / zero）—— option B path 依赖 + zero 方案 A
+   - 尾巴：douyin-ingest skill + tools.d 把 traceparent 放进 submit params（代码已支持）；
+     发布前移除各仓 path 依赖 / zero `[patch.crates-io]`（option A 正式化）。
 
 ### 客户端 API（custom-utils `trace` feature）
 ```rust
