@@ -9,6 +9,18 @@ body {
   background: var(--bg); color: var(--fg);
 }
 .app { display: grid; grid-template-columns: 290px 1fr 420px; height: 100vh; }
+/* 收起：侧栏列宽变 28px，仅留展开把手；graph 列 1fr 自动吃掉腾出来的空间 */
+.app.sidebar-collapsed { grid-template-columns: 28px 1fr 420px; }
+.app.sidebar-collapsed .sidebar { padding: 4px 0; border-right: 1px solid var(--line); }
+.app.sidebar-collapsed .sidebar > *:not(.sidebar-expand) { display: none; }
+.sidebar-expand {
+  display: none;
+  background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+  width: 24px; height: 28px; border-radius: 6px; cursor: pointer;
+  font-size: 11px; padding: 0; margin: 0 auto;
+}
+.app.sidebar-collapsed .sidebar-expand { display: block; }
+.sidebar-expand:hover { border-color: var(--accent); color: var(--accent); }
 .col { overflow: auto; }
 .sidebar { border-right: 1px solid var(--line); padding: 8px; }
 .detail { border-left: 1px solid var(--line); padding: 10px; }
@@ -49,16 +61,6 @@ input {
 .svc-chip.svc-asr-server    { background: #2e2418; color: #ffab70; border-color: #4a3a26; }
 .svc-chip.svc-alarm-server  { background: #1f2e1f; color: #85e89d; border-color: #2f4a2f; }
 .svc-chip.svc-douyin        { background: #2e1a1f; color: #ff8094; border-color: #4a2630; }
-
-/* 侧栏按 service 分组：组头可点击折叠 */
-.svc-group { margin: 6px 0; }
-.svc-group-head {
-  display: flex; align-items: center; gap: 6px; cursor: pointer;
-  padding: 4px 4px; border-radius: 6px; user-select: none;
-}
-.svc-group-head:hover { background: var(--panel); }
-.sg-caret { font-size: 10px; color: var(--mut); width: 10px; }
-.sg-count { font-size: 11px; margin-left: auto; }
 
 /* 自动刷新切换 */
 .auto-toggle { padding: 4px 2px 0; font-size: 11px; color: var(--mut); }
