@@ -16,6 +16,12 @@ body {
 
 header { padding: 6px 4px 10px; display: flex; gap: 8px; align-items: center; }
 header b { color: var(--accent); }
+.clear-btn {
+  margin-left: auto; background: var(--panel); border: 1px solid var(--line);
+  color: var(--err); padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 12px; white-space: nowrap;
+}
+.clear-btn:hover { border-color: var(--err); background: #2a1b1e; }
 .muted { color: var(--mut); }
 input {
   background: var(--panel); border: 1px solid var(--line); color: var(--fg);
@@ -24,12 +30,34 @@ input {
 .trace-item { padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; margin: 6px 0; cursor: pointer; }
 .trace-item:hover { border-color: var(--accent); }
 .trace-item.sel { border-color: var(--accent); background: #1b2330; }
-.trace-item .t { font-weight: 600; }
-.trace-item .m { color: var(--mut); font-size: 11px; }
+
+/* 列表项新布局：第一行 [项目 chip] [类型]，第二行 ID · spans · 时间 */
+.ti-head { display: flex; align-items: center; gap: 7px; }
+.ti-meta { color: var(--mut); font-size: 11px; margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
+.ti-meta code { font-size: 11px; color: var(--mut); }
+.kind-label { font-weight: 600; color: var(--fg); }
+
+/* 项目 chip：背景色与 service 名解耦——同名项目跨刷新颜色稳定。
+   不预登记 service 时回退 svc-default 灰色。 */
+.svc-chip {
+  font-size: 10px; padding: 2px 7px; border-radius: 10px;
+  background: #2a2e38; color: var(--mut); border: 1px solid var(--line);
+  white-space: nowrap; font-weight: 600;
+}
+.svc-chip.svc-zero          { background: #1b2a44; color: #79b8ff; border-color: #2a3f5c; }
+.svc-chip.svc-orchestrator  { background: #2a1f3a; color: #d2a8ff; border-color: #3d2f55; }
+.svc-chip.svc-asr-server    { background: #2e2418; color: #ffab70; border-color: #4a3a26; }
+.svc-chip.svc-alarm-server  { background: #1f2e1f; color: #85e89d; border-color: #2f4a2f; }
+.svc-chip.svc-douyin        { background: #2e1a1f; color: #ff8094; border-color: #4a2630; }
+
+/* 自动刷新切换 */
+.auto-toggle { padding: 4px 2px 0; font-size: 11px; color: var(--mut); }
+.auto-toggle input[type=checkbox] { vertical-align: middle; margin-right: 4px; width: auto; }
+.auto-toggle label { cursor: pointer; }
 
 /* ── React Flow 自定义节点 ── */
 .span-node {
-  width: 230px; min-height: 64px; padding: 7px 9px; border-radius: 9px;
+  width: 180px; min-height: 60px; padding: 6px 8px; border-radius: 9px;
   background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent);
   color: var(--fg); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
@@ -52,3 +80,59 @@ table.kv td.k { color: var(--mut); width: 150px; }
 pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 40vh; }
 
 .react-flow__attribution { display: none; }
+
+/* ── LLM 请求 / 响应结构化视图 ── */
+.detail h3 { display: flex; align-items: center; gap: 6px; }
+.btn-tiny {
+  background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+  font: inherit; font-size: 10px; padding: 1px 7px; border-radius: 4px;
+  cursor: pointer;
+}
+.btn-tiny:hover { border-color: var(--accent); color: var(--accent); }
+.btn-tiny.right { margin-left: auto; }
+.btn-tiny.right + .btn-tiny.right { margin-left: 6px; }
+
+.llm-params { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.param-chip {
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 2px 7px; border-radius: 10px; font-size: 11px;
+}
+.param-chip b { color: var(--accent); font-weight: 600; }
+
+.tools-block { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin: 4px 0 8px; }
+.tools-block summary { cursor: pointer; color: var(--mut); font-size: 11px; }
+.tools-block pre { margin: 6px 0 2px; max-height: 30vh; }
+
+.msg-list { display: flex; flex-direction: column; gap: 6px; }
+.msg {
+  border: 1px solid var(--line); border-left: 3px solid var(--mut);
+  border-radius: 6px; background: var(--panel); padding: 6px 8px;
+  transition: background 0.4s, border-color 0.4s;
+}
+.msg.msg-system    { border-left-color: #8b93a3; }
+.msg.msg-user      { border-left-color: #58a6ff; }
+.msg.msg-assistant { border-left-color: #3fb950; }
+.msg.msg-tool      { border-left-color: #d2a8ff; }
+.msg.last-user     { border-color: #58a6ff; }
+.msg.flash         { background: rgba(255,200,0,0.18); border-color: rgba(255,200,0,0.85); }
+
+.msg-head { display: flex; align-items: center; gap: 8px; }
+.msg-role {
+  font-size: 10px; padding: 1px 7px; border-radius: 10px; font-weight: 600; color: var(--bg);
+}
+.role-system    { background: #8b93a3; }
+.role-user      { background: var(--accent); }
+.role-assistant { background: var(--ok); }
+.role-tool      { background: var(--flow); }
+.msg-len { font-size: 10px; }
+.msg-body {
+  margin: 4px 0 0; max-height: 40vh; font-size: 12px;
+  background: var(--bg); border-color: var(--line);
+}
+.msg-tools { margin-top: 6px; }
+.tool-call { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; margin-top: 4px; }
+.tc-name { font-size: 11px; color: var(--flow); font-weight: 600; }
+.tc-name code { color: var(--mut); font-size: 10px; margin-left: 4px; }
+.tc-args { margin: 4px 0 0; max-height: 25vh; font-size: 11px; background: var(--panel); }
+
+.llm-req, .llm-resp { display: flex; flex-direction: column; gap: 6px; }

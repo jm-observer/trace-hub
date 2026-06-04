@@ -127,6 +127,17 @@ impl Storage {
         Ok(spans.len())
     }
 
+    /// 清空全部记录（span + detail + link）。返回删除的 span 行数。
+    pub fn clear_all(&self) -> anyhow::Result<usize> {
+        let mut guard = self.conn.lock().expect("storage mutex poisoned");
+        let tx = guard.transaction()?;
+        let n = tx.execute("DELETE FROM span", [])?;
+        tx.execute("DELETE FROM span_detail", [])?;
+        tx.execute("DELETE FROM span_link", [])?;
+        tx.commit()?;
+        Ok(n)
+    }
+
     /// 一条 trace 的全部节点（信封+概要，不含 body），按 start_ms 升序。
     pub fn trace_nodes(&self, trace_id: &str) -> anyhow::Result<Vec<NodeView>> {
         let guard = self.conn.lock().expect("storage mutex poisoned");
@@ -256,9 +267,16 @@ impl Storage {
         conn: &Connection,
         trace_id: &str,
     ) -> anyhow::Result<Option<(String, String, Option<String>)>> {
+        // 优先取真正的根（parent_span_id IS NULL）；找不到时回退到该 trace 里**最早的**
+        // span 当作展示用根。原因：调用方可能没显式 emit 根 span，只 emit 了 child
+        // spans（如 zero 的 record_llm_span 用 turn.child()——turn 本身只是内存对象、
+        // 从不上传），此时所有 span 的 parent_span_id 都非空，列表会拿不到 service/kind。
+        // ORDER BY (parent_span_id IS NULL) DESC 让真根优先（SQLite 把 1 排前面），
+        // 再按 start_ms ASC 兜底取最早 span。
         let mut stmt = conn.prepare(
             "SELECT service, kind, flow_name FROM span \
-             WHERE trace_id = ?1 AND parent_span_id IS NULL ORDER BY start_ms LIMIT 1",
+             WHERE trace_id = ?1 \
+             ORDER BY (parent_span_id IS NULL) DESC, start_ms ASC LIMIT 1",
         )?;
         let mut rows = stmt.query(params![trace_id])?;
         match rows.next()? {
@@ -413,6 +431,23 @@ mod tests {
         assert_eq!(hit.len(), 1);
         assert_eq!(hit[0].trace_id, "trB");
         assert_eq!(hit[0].root_kind.as_deref(), Some("alarm_submit"));
+    }
+
+    #[test]
+    fn clear_all_wipes_everything() {
+        let st = mem();
+        let root = rec("tr1", "s1", None, "user_message");
+        let mut child = rec("tr1", "s2", Some("s1"), "llm_call");
+        child.request_body = Some("hi".into());
+        child.links = vec![SpanLink { trace_id: "tr1".into(), span_id: "s1".into() }];
+        st.insert_spans(vec![root, child]).unwrap();
+        assert_eq!(st.list_traces(None, 10).unwrap().len(), 1);
+
+        let deleted = st.clear_all().unwrap();
+        assert_eq!(deleted, 2, "返回删除的 span 行数");
+        assert_eq!(st.list_traces(None, 10).unwrap().len(), 0);
+        assert!(st.trace_nodes("tr1").unwrap().is_empty());
+        assert!(st.span_detail("s2").unwrap().is_none());
     }
 
     #[test]

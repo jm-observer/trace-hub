@@ -3,7 +3,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
@@ -23,6 +23,7 @@ pub fn router(storage: Storage) -> Router {
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/spans", post(ingest))
         .route("/v1/traces", get(list_traces))
+        .route("/v1/clear", delete(clear_all))
         .route("/v1/traces/{trace_id}", get(get_trace))
         .route("/v1/spans/{span_id}", get(get_span))
         .with_state(storage)
@@ -35,6 +36,14 @@ async fn ingest(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let n = tokio::task::spawn_blocking(move || st.insert_spans(req.spans)).await??;
     Ok(Json(json!({ "accepted": n })))
+}
+
+/// 清空全部 trace 记录。返回 `{deleted: N}`（删除的 span 行数）。
+async fn clear_all(
+    State(st): State<Storage>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let n = tokio::task::spawn_blocking(move || st.clear_all()).await??;
+    Ok(Json(json!({ "deleted": n })))
 }
 
 #[derive(Debug, Deserialize)]
