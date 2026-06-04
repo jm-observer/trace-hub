@@ -289,6 +289,7 @@ dependencies = [
 [[package]]
 name = "custom-utils"
 version = "0.15.0"
+source = "git+https://github.com/jm-observer/custom-utils.git?rev=cc6885fc1fb852bf8f76150898cb6c71deb291a1#cc6885fc1fb852bf8f76150898cb6c71deb291a1"
 dependencies = [
  "ansi_term",
  "anyhow",

@@ -64,9 +64,35 @@ input {
 .span-node.flow { border-left-color: var(--flow); }
 .span-node.err { border-left-color: var(--err); }
 .span-node.sel { outline: 2px solid var(--accent); }
+
+/* 工具调用：橙色调，与 llm_call 的蓝、callback_inbound 的绿区分开 */
+.span-node.tool { border-left-color: #ffab70; }
+.span-node.tool .sn-kind { background: #2e2418; color: #ffab70; }
+/* OrchestrateTask：特殊 tool call，引爆下游子流程的入口；虚线边 + 紫色徽章
+   提示"这条工具调用会派生子树"。 */
+.span-node.orchestrate {
+  border-left-color: var(--flow);
+  border-style: dashed;
+  background: linear-gradient(180deg, rgba(210,168,255,0.06) 0%, var(--panel) 60%);
+}
+.span-node.orchestrate .sn-kind {
+  background: #2a2030; color: var(--flow);
+}
+.span-node.orchestrate .sn-kind::before { content: "⤷ "; opacity: 0.8; }
+
 .sn-head { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
 .sn-kind { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #222b3a; color: var(--accent); white-space: nowrap; }
 .span-node.flow .sn-kind { background: #2a2030; color: var(--flow); }
+
+/* 折叠按钮：放 sn-head 第一位，不抢 sn-kind 视觉重心 */
+.sn-fold {
+  background: transparent; border: none; color: var(--mut); cursor: pointer;
+  font-size: 10px; padding: 0 4px; margin-left: -2px; line-height: 1;
+}
+.sn-fold:hover { color: var(--accent); }
+.span-node.folded { opacity: 0.85; }
+.span-node.folded .sn-kind { box-shadow: inset 0 0 0 1px var(--mut); }
+.sn-folded-hint { color: var(--mut); font-size: 10px; margin-left: 4px; }
 .sn-svc { font-size: 10px; color: var(--mut); }
 .sn-sum { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sn-meta { margin-top: 3px; font-size: 10px; color: var(--mut); }

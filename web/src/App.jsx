@@ -11,7 +11,13 @@ const RENDERERS = {
   user_message: (n) => n.summary?.text ?? '(消息)',
   router_decision: (n) => `${n.summary?.decision ?? ''}`,
   llm_call: (n) => `${n.summary?.model ?? 'llm'}`,
-  agent_task: (n) => n.flow_name ?? 'task',
+  // 工具调用：`summary.tool` 标 nova 内置 / 外部工具名（如 OrchestrateTask、
+  // alarm_cli_once）；`flow_name` 一般是工具承接的目标（skill / 资源名）。
+  tool_call: (n) => {
+    const tool = n.summary?.tool ?? 'tool'
+    return n.flow_name ? `${tool} · ${n.flow_name}` : tool
+  },
+  agent_task: (n) => n.flow_name ?? 'task', // 兼容老数据；新数据走 tool_call
   alarm_submit: (n) => `⏰ ${n.summary?.once_at ?? n.summary?.cron ?? ''} ${n.summary?.name ?? ''}`,
   alarm_fire: (n) => `⏰ ${n.summary?.name ?? ''} ×${n.summary?.attempts ?? ''}`,
   douyin_done: (n) => `${n.summary?.callback_kind ?? ''}`,
@@ -31,7 +37,10 @@ const KIND_LABELS = {
   tts: 'TTS 合成',
   user_message: '用户消息',
   router_decision: '路由决策',
+  tool_call: '工具调用',
   agent_task: 'Agent 任务',
+  session: '会话',
+  callback_inbound: '回调入站',
   alarm_submit: '闹钟提交',
   alarm_fire: '闹钟触发',
   delivery: '消息投递',
@@ -56,17 +65,59 @@ function summaryText(n) {
   return kvInline(n.summary)
 }
 
-// ── 把后端的 flat node 列表转成 React Flow 的 nodes/edges + dagre 布局 ──
-function buildGraph(nodes) {
-  const ids = new Set(nodes.map((n) => n.span_id))
-  const rfNodes = nodes.map((n) => ({
+// ── 后代统计：每个 span_id 累计可见后代数（含间接），用于折叠节点显示"▶ (N)"。
+function computeDescendantCounts(nodes) {
+  const childrenOf = new Map()
+  nodes.forEach((n) => {
+    if (n.parent_span_id) {
+      if (!childrenOf.has(n.parent_span_id)) childrenOf.set(n.parent_span_id, [])
+      childrenOf.get(n.parent_span_id).push(n.span_id)
+    }
+  })
+  const count = new Map()
+  const recur = (id) => {
+    if (count.has(id)) return count.get(id)
+    const kids = childrenOf.get(id) || []
+    let n = kids.length
+    for (const k of kids) n += recur(k)
+    count.set(id, n)
+    return n
+  }
+  nodes.forEach((n) => recur(n.span_id))
+  return { childrenOf, count }
+}
+
+// ── 把后端的 flat node 列表转成 React Flow 的 nodes/edges + dagre 布局。
+//    foldedSet 里的 span 自身可见，其所有后代不可见；折叠态下连出的边按隐藏处理。
+function buildGraph(nodes, foldedSet) {
+  const { childrenOf, count } = computeDescendantCounts(nodes)
+  // 标记哪些节点因祖先折叠而被隐藏
+  const hidden = new Set()
+  const markHidden = (id) => {
+    const kids = childrenOf.get(id) || []
+    for (const k of kids) {
+      hidden.add(k)
+      markHidden(k)
+    }
+  }
+  foldedSet.forEach((id) => markHidden(id))
+
+  const visible = nodes.filter((n) => !hidden.has(n.span_id))
+  const visibleIds = new Set(visible.map((n) => n.span_id))
+  const rfNodes = visible.map((n) => ({
     id: n.span_id, type: 'span', position: { x: 0, y: 0 },
-    data: { node: n, summary: summaryText(n) },
+    data: {
+      node: n,
+      summary: summaryText(n),
+      folded: foldedSet.has(n.span_id),
+      hiddenCount: foldedSet.has(n.span_id) ? count.get(n.span_id) || 0 : 0,
+      hasChildren: (childrenOf.get(n.span_id) || []).length > 0,
+    },
   }))
   const treeEdges = []
   const linkEdges = []
   nodes.forEach((n) => {
-    if (n.parent_span_id && ids.has(n.parent_span_id)) {
+    if (n.parent_span_id && visibleIds.has(n.span_id) && visibleIds.has(n.parent_span_id)) {
       treeEdges.push({
         id: `t-${n.parent_span_id}-${n.span_id}`,
         source: n.parent_span_id, target: n.span_id,
@@ -74,7 +125,7 @@ function buildGraph(nodes) {
       })
     }
     ;(n.links || []).forEach((l, i) => {
-      if (ids.has(l.span_id)) {
+      if (visibleIds.has(n.span_id) && visibleIds.has(l.span_id)) {
         linkEdges.push({
           id: `l-${n.span_id}-${l.span_id}-${i}`,
           source: l.span_id, target: n.span_id, label: 'link',
@@ -90,16 +141,44 @@ function buildGraph(nodes) {
 function SpanNode({ data, selected }) {
   const n = data.node
   const ok = n.status === 'ok'
+  // tool_call 区别于普通 llm_call：所有 tool_call 走橙色调；其中 OrchestrateTask
+  // （委派子 Agent 的特殊 tool call）再加 ".orchestrate" 二级类，给虚线边等视觉
+  // 强调，提示"这是个引爆下游子流程的入口"。
+  const isToolCall = n.kind === 'tool_call'
+  const isOrchestrate = isToolCall && n.summary?.tool === 'OrchestrateTask'
   const cls =
-    'span-node' + (n.flow_name ? ' flow' : '') + (ok ? '' : ' err') + (selected ? ' sel' : '')
+    'span-node' +
+    (n.flow_name ? ' flow' : '') +
+    (isToolCall ? ' tool' : '') +
+    (isOrchestrate ? ' orchestrate' : '') +
+    (ok ? '' : ' err') +
+    (selected ? ' sel' : '') +
+    (data.folded ? ' folded' : '')
   return (
     <div className={cls}>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <div className="sn-head">
+        {data.hasChildren && (
+          <button
+            className="sn-fold"
+            title={data.folded ? `展开（隐藏了 ${data.hiddenCount} 个子节点）` : '折叠子树'}
+            onClick={(e) => {
+              e.stopPropagation()
+              data.onToggleFold?.(n.span_id)
+            }}
+          >
+            {data.folded ? '▶' : '▼'}
+          </button>
+        )}
         <span className="sn-kind">{n.flow_name || n.kind}</span>
         <span className="sn-svc">{n.service}</span>
       </div>
-      <div className="sn-sum">{data.summary}</div>
+      <div className="sn-sum">
+        {data.summary}
+        {data.folded && data.hiddenCount > 0 && (
+          <span className="sn-folded-hint"> · 折叠 {data.hiddenCount} 个</span>
+        )}
+      </div>
       <div className="sn-meta">
         <span className="sn-time">{fmtTime(n.start_ms)}</span>
         {' · '}<span className={ok ? 'ok' : 'er'}>{ok ? 'ok' : 'err'}</span>
@@ -394,6 +473,10 @@ export default function App() {
   // 自动刷新开关：默认开。用户在搜索框聚焦时暂停（避免输入时列表跳动）。
   const [autoOn, setAutoOn] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
+  // 折叠状态：被折叠的 span_id 集合。切 trace 时清空。
+  const [foldedSet, setFoldedSet] = useState(() => new Set())
+  // 当前 trace 的原始 nodes（含完整层级），折叠状态变化时重新 buildGraph。
+  const rawNodesRef = React.useRef([])
   // 用 ref 持当前 query，避免 effect 把它进依赖后每键一字重启 interval。
   const qRef = React.useRef(q)
   useEffect(() => { qRef.current = q }, [q])
@@ -416,18 +499,45 @@ export default function App() {
     return () => clearInterval(id)
   }, [autoOn, searchFocused, refreshList])
 
+  const toggleFold = useCallback((spanId) => {
+    setFoldedSet((prev) => {
+      const next = new Set(prev)
+      if (next.has(spanId)) next.delete(spanId)
+      else next.add(spanId)
+      return next
+    })
+  }, [])
+
   const openTrace = useCallback(async (id) => {
     setTraceId(id)
     setSel(null)
+    // 切 trace 时清空折叠状态，避免上个 trace 的折叠错误命中本 trace 同 id 节点
+    setFoldedSet(new Set())
     try {
       const { nodes } = await getTrace(id)
-      const g = buildGraph(nodes)
-      setNodes(g.nodes)
-      setEdges(g.edges)
+      rawNodesRef.current = nodes
     } catch (e) {
       setStatus('打开失败: ' + e.message)
     }
-  }, [setNodes, setEdges])
+  }, [])
+
+  // 任何时候 raw nodes / 折叠集变化，重算 React Flow 节点 + 边 + 布局。
+  // foldedSet 是显式依赖；rawNodesRef 通过 traceId 间接驱动（切换 trace 时已重置）。
+  useEffect(() => {
+    const rawNodes = rawNodesRef.current
+    if (!rawNodes || rawNodes.length === 0) {
+      setNodes([])
+      setEdges([])
+      return
+    }
+    const g = buildGraph(rawNodes, foldedSet)
+    g.nodes = g.nodes.map((rfn) => ({
+      ...rfn,
+      data: { ...rfn.data, onToggleFold: toggleFold },
+    }))
+    setNodes(g.nodes)
+    setEdges(g.edges)
+  }, [foldedSet, traceId, toggleFold, setNodes, setEdges])
 
   const onClear = useCallback(async () => {
     if (!window.confirm('清空全部 trace 记录？此操作不可撤销。')) return
