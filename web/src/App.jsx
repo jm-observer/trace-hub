@@ -433,17 +433,55 @@ function LlmBodies({ requestRaw, responseRaw }) {
   )
 }
 
-function Detail({ sel }) {
+// 从指定 span 向上沿 parent_span_id 链走，收集途中遇到的"识别 ID"——
+// session_id（去 session）、message_id（去 turn）、alarm_id（去 alarm_*）、
+// tool_use_id（去 tool_call）、from_remote_span（callback_inbound 等）。
+// 这样 UI 详情面板能一眼把"这条 span 属于哪条用户消息 / 哪次工具调用"展示出来，
+// 方便排查时跨服务对线索。
+function collectAncestorIds(selectedNode, nodesMap) {
+  const ids = {}
+  const add = (key, label, value) => {
+    if (value == null) return
+    if (ids[key]) return // 第一次（最近祖先）赢
+    ids[key] = { label, value: String(value) }
+  }
+  let cur = selectedNode
+  let depth = 0
+  while (cur && depth < 32) {
+    const s = cur.summary || {}
+    if (cur.kind === 'turn') add('message_id', 'Message ID', s.message_id)
+    if (cur.kind === 'session') add('session_id', 'Session ID', s.session_id)
+    add('session_id', 'Session ID', s.session_id) // session_id 也可能下游 span 自带
+    if (cur.kind === 'tool_call') add('tool_use_id', 'Tool Use ID', s.tool_use_id)
+    if (cur.kind?.startsWith('alarm_')) add('alarm_id', 'Alarm ID', s.alarm_id)
+    cur = cur.parent_span_id ? nodesMap.get(cur.parent_span_id) : null
+    depth++
+  }
+  return Object.values(ids)
+}
+
+function Detail({ sel, nodesMap }) {
   const n = sel.node
   const d = sel.detail
   const hasDetail = d && d.detail && typeof d.detail === 'object' && Object.keys(d.detail).length > 0
   const isLlm = n.kind === 'llm_call'
+  const idStack = nodesMap ? collectAncestorIds(n, nodesMap) : []
   return (
     <div>
       <div className="muted">
         {n.service} / {n.kind} / span {n.span_id.slice(0, 12)}…
         {n.body_truncated ? ' · body 截断' : ''}
       </div>
+      {idStack.length > 0 && (
+        <div className="id-stack">
+          {idStack.map((id) => (
+            <div key={id.label} className="id-row" title={id.value}>
+              <span className="id-label">{id.label}</span>
+              <code className="id-value">{id.value}</code>
+            </div>
+          ))}
+        </div>
+      )}
       <h3>概要</h3>
       {kvTable(n.summary)}
       {hasDetail && (<><h3>detail</h3><pre>{JSON.stringify(d.detail, null, 2)}</pre></>)}
@@ -478,6 +516,15 @@ export default function App() {
   // 当前 trace 的原始 nodes（含完整层级）。用 state 而非 ref：getTrace 是 async，
   // 用 ref 会让"重建图的 effect"在 traceId 切换瞬间读到旧 ref，导致需要点两次。
   const [rawNodes, setRawNodes] = useState([])
+  // span_id → node 的快速查表，供 Detail 沿 parent_span_id 链向上找识别 ID。
+  // 用 useMemo 跟 rawNodes 同步变化。
+  const nodesMap = useMemo(() => {
+    const m = new Map()
+    for (const n of rawNodes) m.set(n.span_id, n)
+    return m
+  }, [rawNodes])
+  const nodesMapRef = React.useRef(nodesMap)
+  useEffect(() => { nodesMapRef.current = nodesMap }, [nodesMap])
   // 侧栏整体折叠：true 时只显示一条窄边带展开按钮，把更多空间让给流程图。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   // 用 ref 持当前 query，避免 effect 把它进依赖后每键一字重启 interval。
@@ -646,7 +693,7 @@ export default function App() {
       </div>
 
       <div className="col detail">
-        {sel ? <Detail sel={sel} /> : <div className="muted">选择左侧 trace，点节点看详情</div>}
+        {sel ? <Detail sel={sel} nodesMap={nodesMapRef.current} /> : <div className="muted">选择左侧 trace，点节点看详情</div>}
       </div>
     </div>
   )
