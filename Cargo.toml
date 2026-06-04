@@ -13,7 +13,9 @@ repository = "https://github.com/jm-observer/trace-hub"
 # 自更新 + rootless systemd 安装 + workspace 解析 + 看门狗 + flexi_logger + span/trace 模型。
 # libsystemd 由 custom-utils 按 target 门控，非 Linux 自动缺省。`prod` feature（见各 crate）
 # 决定日志落盘 vs 控制台。`trace` feature 提供 SpanRecord/IngestRequest 等契约类型。
-custom-utils = { path = "../custom-utils", default-features = false, features = ["updater", "logger", "trace"] }
+# 改用 git rev（不再走本地 path）是为了 docker 交叉编译时容器内能正常解析——
+# 容器只挂载本仓根，看不到兄弟仓的 path。详见用户级 memory:reference_cross_build_aarch64。
+custom-utils = { git = "https://github.com/jm-observer/custom-utils.git", rev = "cc6885fc1fb852bf8f76150898cb6c71deb291a1", default-features = false, features = ["updater", "logger", "trace"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
