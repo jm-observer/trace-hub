@@ -50,6 +50,16 @@ input {
 .svc-chip.svc-alarm-server  { background: #1f2e1f; color: #85e89d; border-color: #2f4a2f; }
 .svc-chip.svc-douyin        { background: #2e1a1f; color: #ff8094; border-color: #4a2630; }
 
+/* 侧栏按 service 分组：组头可点击折叠 */
+.svc-group { margin: 6px 0; }
+.svc-group-head {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 4px 4px; border-radius: 6px; user-select: none;
+}
+.svc-group-head:hover { background: var(--panel); }
+.sg-caret { font-size: 10px; color: var(--mut); width: 10px; }
+.sg-count { font-size: 11px; margin-left: auto; }
+
 /* 自动刷新切换 */
 .auto-toggle { padding: 4px 2px 0; font-size: 11px; color: var(--mut); }
 .auto-toggle input[type=checkbox] { vertical-align: middle; margin-right: 4px; width: auto; }

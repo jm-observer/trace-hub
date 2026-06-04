@@ -475,8 +475,11 @@ export default function App() {
   const [searchFocused, setSearchFocused] = useState(false)
   // 折叠状态：被折叠的 span_id 集合。切 trace 时清空。
   const [foldedSet, setFoldedSet] = useState(() => new Set())
-  // 当前 trace 的原始 nodes（含完整层级），折叠状态变化时重新 buildGraph。
-  const rawNodesRef = React.useRef([])
+  // 当前 trace 的原始 nodes（含完整层级）。用 state 而非 ref：getTrace 是 async，
+  // 用 ref 会让"重建图的 effect"在 traceId 切换瞬间读到旧 ref，导致需要点两次。
+  const [rawNodes, setRawNodes] = useState([])
+  // 侧栏分组折叠：被折叠的 service 名集合。
+  const [collapsedSvc, setCollapsedSvc] = useState(() => new Set())
   // 用 ref 持当前 query，避免 effect 把它进依赖后每键一字重启 interval。
   const qRef = React.useRef(q)
   useEffect(() => { qRef.current = q }, [q])
@@ -515,16 +518,14 @@ export default function App() {
     setFoldedSet(new Set())
     try {
       const { nodes } = await getTrace(id)
-      rawNodesRef.current = nodes
+      setRawNodes(nodes)
     } catch (e) {
       setStatus('打开失败: ' + e.message)
     }
   }, [])
 
-  // 任何时候 raw nodes / 折叠集变化，重算 React Flow 节点 + 边 + 布局。
-  // foldedSet 是显式依赖；rawNodesRef 通过 traceId 间接驱动（切换 trace 时已重置）。
+  // raw nodes / 折叠集变化时，重算 React Flow 节点 + 边 + 布局。
   useEffect(() => {
-    const rawNodes = rawNodesRef.current
     if (!rawNodes || rawNodes.length === 0) {
       setNodes([])
       setEdges([])
@@ -537,7 +538,7 @@ export default function App() {
     }))
     setNodes(g.nodes)
     setEdges(g.edges)
-  }, [foldedSet, traceId, toggleFold, setNodes, setEdges])
+  }, [rawNodes, foldedSet, toggleFold, setNodes, setEdges])
 
   const onClear = useCallback(async () => {
     if (!window.confirm('清空全部 trace 记录？此操作不可撤销。')) return
@@ -588,27 +589,54 @@ export default function App() {
           </label>
         </div>
         <div>
-          {traces.map((t) => {
-            const svc = t.root_service ?? '?'
-            const kindLabel = t.title || labelOfKind(t.root_kind)
-            return (
-              <div
-                key={t.trace_id}
-                className={'trace-item' + (t.trace_id === traceId ? ' sel' : '')}
-                onClick={() => openTrace(t.trace_id)}
-              >
-                <div className="ti-head">
-                  <span className={'svc-chip svc-' + svc.replace(/[^a-z0-9]/gi, '-')}>{svc}</span>
-                  <span className="kind-label">{kindLabel}</span>
+          {(() => {
+            // 按 root_service 分组，保持 traces 内的原顺序（已按时间倒序）。
+            const groups = []
+            const idx = new Map()
+            for (const t of traces) {
+              const svc = t.root_service ?? '?'
+              if (!idx.has(svc)) { idx.set(svc, groups.length); groups.push({ svc, items: [] }) }
+              groups[idx.get(svc)].items.push(t)
+            }
+            return groups.map(({ svc, items }) => {
+              const collapsed = collapsedSvc.has(svc)
+              return (
+                <div key={svc} className="svc-group">
+                  <div
+                    className="svc-group-head"
+                    onClick={() => setCollapsedSvc((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(svc)) next.delete(svc); else next.add(svc)
+                      return next
+                    })}
+                  >
+                    <span className="sg-caret">{collapsed ? '▶' : '▼'}</span>
+                    <span className={'svc-chip svc-' + svc.replace(/[^a-z0-9]/gi, '-')}>{svc}</span>
+                    <span className="sg-count muted">{items.length}</span>
+                  </div>
+                  {!collapsed && items.map((t) => {
+                    const kindLabel = t.title || labelOfKind(t.root_kind)
+                    return (
+                      <div
+                        key={t.trace_id}
+                        className={'trace-item' + (t.trace_id === traceId ? ' sel' : '')}
+                        onClick={() => openTrace(t.trace_id)}
+                      >
+                        <div className="ti-head">
+                          <span className="kind-label">{kindLabel}</span>
+                        </div>
+                        <div className="ti-meta">
+                          <code title={t.trace_id}>{t.trace_id.slice(0, 12)}…</code>
+                          <span>· {t.span_count} spans</span>
+                          <span>· {fmtTime(t.start_ms)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div className="ti-meta">
-                  <code title={t.trace_id}>{t.trace_id.slice(0, 12)}…</code>
-                  <span>· {t.span_count} spans</span>
-                  <span>· {fmtTime(t.start_ms)}</span>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })
+          })()}
         </div>
       </div>
 
