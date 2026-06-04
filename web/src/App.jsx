@@ -676,6 +676,11 @@ export default function App() {
 
       <div className="col graph">
         <ReactFlow
+          // key 跟 traceId 走：切 trace 时整棵 ReactFlow 重新挂载，viewport（pan/zoom）
+          // 重置 + fitView 重新跑一次。否则保留上一条 trace 的视窗位置，新 trace 的
+          // 节点会出现在屏幕外的"无人区"，需要手动按 Fit。同一条 trace 内的自动
+          // 刷新 / 折叠操作不改 traceId，用户手动调过的视窗保留不动。
+          key={traceId || 'empty'}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
