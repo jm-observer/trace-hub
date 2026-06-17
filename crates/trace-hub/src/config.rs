@@ -65,10 +65,22 @@ impl Config {
             def
         };
 
-        let bind: SocketAddr = file
+        let mut bind: SocketAddr = file
             .bind
             .parse()
             .with_context(|| format!("非法 bind 地址: {}", file.bind))?;
+
+        // 端口 env 覆盖：`TRACE_HUB_PORT`（u16）优先于 config 里 bind 的端口；
+        // 缺省 / 非法时保留 config 端口（仅在解析失败时告警，不中断启动）。
+        if let Ok(raw) = std::env::var("TRACE_HUB_PORT") {
+            match raw.trim().parse::<u16>() {
+                Ok(port) => {
+                    bind.set_port(port);
+                    log::info!("TRACE_HUB_PORT 覆盖监听端口为 {port}");
+                }
+                Err(_) => log::warn!("TRACE_HUB_PORT 非法（{raw}），沿用 config 端口"),
+            }
+        }
 
         let db_path = {
             let p = PathBuf::from(&file.db);

@@ -17,10 +17,21 @@ async fn ui() -> Html<&'static str> {
     Html(include_str!("ui/index.html"))
 }
 
+/// 健康探活：返回 `{status, version, commit}`。`version` 取自 crate 版本，
+/// `commit` 取自 build.rs 注入的 `GIT_COMMIT`（缺失回退 "unknown"）。
+async fn health() -> Json<serde_json::Value> {
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": option_env!("GIT_COMMIT").unwrap_or("unknown"),
+    }))
+}
+
 pub fn router(storage: Storage) -> Router {
     Router::new()
         .route("/", get(ui))
-        .route("/healthz", get(|| async { "ok" }))
+        .route("/health", get(health))
+        .route("/healthz", get(health))
         .route("/v1/spans", post(ingest))
         .route("/v1/traces", get(list_traces))
         .route("/v1/clear", delete(clear_all))
