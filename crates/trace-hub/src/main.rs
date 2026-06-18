@@ -16,6 +16,7 @@ mod web;
 
 use std::path::PathBuf;
 
+use anyhow::Context;
 use config::Config;
 use custom_utils::updater::{CliAction, LinuxService};
 use storage::Storage;
@@ -64,9 +65,24 @@ async fn main() -> anyhow::Result<()> {
 /// 服务模式：在解析好的 `workspace` 下加载配置文件并提供 HTTP 服务。
 async fn serve(workspace: PathBuf) -> anyhow::Result<()> {
     let cfg = Config::load(&workspace)?;
+
+    // 监听地址：环境变量 `TRACE_HUB_BIND`（完整 `host:port`，systemd unit 注入或外部 env）
+    // 优先于 config.toml；未设/为空则回退配置文件里的 bind。G10 部署面板按服务 registry
+    // 主端口拼成 `0.0.0.0:<port>` 经 install `-e TRACE_HUB_BIND=...` 写进 unit。
+    let bind: std::net::SocketAddr = match std::env::var("TRACE_HUB_BIND")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        Some(s) => s
+            .parse()
+            .with_context(|| format!("非法 TRACE_HUB_BIND 地址: {s}"))?,
+        None => cfg.bind,
+    };
+
     log::info!(
         "trace-hub starting: bind={} db={} body_limit={} workspace={}",
-        cfg.bind,
+        bind,
         cfg.db_path.display(),
         cfg.body_limit,
         workspace.display()
@@ -75,8 +91,8 @@ async fn serve(workspace: PathBuf) -> anyhow::Result<()> {
     let storage = Storage::open(&cfg.db_path, cfg.body_limit)?;
     let app = web::router(storage);
 
-    let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
-    log::info!("listening on http://{}", cfg.bind);
+    let listener = tokio::net::TcpListener::bind(bind).await?;
+    log::info!("listening on http://{}", bind);
     axum::serve(listener, app).await?;
     Ok(())
 }

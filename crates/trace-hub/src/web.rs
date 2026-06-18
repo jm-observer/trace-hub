@@ -17,10 +17,24 @@ async fn ui() -> Html<&'static str> {
     Html(include_str!("ui/index.html"))
 }
 
+/// 健康端点（G10 部署面板探测约定）：返回 `status`/`version`/`commit`/`timestamp`。
+/// - `version` = 当前包语义版本（远端**运行版**）。
+/// - `commit`  = 编译期嵌入的 git 短哈希（远端**编译版**，build.rs 取不到时为 "unknown"）。
+/// `/healthz` 仍保留纯文本 "ok" 给简单存活探测。
+async fn health() -> Json<serde_json::Value> {
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": env!("GIT_COMMIT_HASH"),
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    }))
+}
+
 pub fn router(storage: Storage) -> Router {
     Router::new()
         .route("/", get(ui))
         .route("/healthz", get(|| async { "ok" }))
+        .route("/health", get(health))
         .route("/v1/spans", post(ingest))
         .route("/v1/traces", get(list_traces))
         .route("/v1/clear", delete(clear_all))
