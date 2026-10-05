@@ -140,7 +140,7 @@ turn trace 下）。zero 用 `[patch."…zero-nova.git"]` 指向本地改造 nov
 
 ### 客户端 API（custom-utils `trace` feature）
 ```rust
-custom_utils::trace::init(TraceConfig::new("http://g10:9100/v1/spans", "zero"));
+custom_utils::trace::init(TraceConfig::new("http://g10:9120/v1/spans", "zero"));
 let ctx = parent.child();                       // 同 trace_id 新 span
 trace::inject_traceparent(&ctx, &mut headers);  // 出站
 let ctx = trace::extract_traceparent(|h| ...);  // 入站

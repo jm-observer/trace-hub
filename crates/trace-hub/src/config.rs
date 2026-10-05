@@ -29,7 +29,7 @@ struct FileConfig {
 impl Default for FileConfig {
     fn default() -> Self {
         Self {
-            bind: "0.0.0.0:9100".to_string(),
+            bind: "0.0.0.0:9120".to_string(),
             db: "spans.db".to_string(),
             body_limit: 1_000_000,
         }

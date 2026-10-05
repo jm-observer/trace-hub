@@ -22,7 +22,7 @@
     部署后要重启的 systemd 用户服务名，默认 trace-hub。
 
 .PARAMETER Bind
-    trace-hub 的监听地址，默认 0.0.0.0:9100。部署时通过 `trace-hub install -e TRACE_HUB_BIND=<Bind>`
+    trace-hub 的监听地址，默认 0.0.0.0:9120。部署时通过 `trace-hub install -e TRACE_HUB_BIND=<Bind>`
     写进 systemd unit 的 `Environment=TRACE_HUB_BIND=<Bind>`（重装 unit 使新端口生效）。
     serve 时 TRACE_HUB_BIND 优先于 config.toml。G10 部署面板把该服务 registry 主端口拼成
     `0.0.0.0:<port>` 传进来。
@@ -45,13 +45,13 @@
 .EXAMPLE
     pwsh ./deploy-g10.ps1
     pwsh ./deploy-g10.ps1 -SkipBuild
-    pwsh ./deploy-g10.ps1 -Bind 0.0.0.0:9101
+    pwsh ./deploy-g10.ps1 -Bind 0.0.0.0:9121
 #>
 param(
     [string]$G10Host = "fengqi@192.168.0.68",
     [string]$DestDir = "~/.local/bin",
     [string]$Service = "trace-hub",
-    [string]$Bind = "0.0.0.0:9100",
+    [string]$Bind = "0.0.0.0:9120",
     [string]$Workspace = "~/.config/trace-hub",
     [string[]]$Env = @(),
     [switch]$SkipBuild,

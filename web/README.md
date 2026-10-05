@@ -10,7 +10,7 @@ trace-hub 的图形界面：Vite + React + [React Flow](https://reactflow.dev) �
 ```bash
 cd web
 npm install
-npm run dev      # 本地开发（需 trace-hub 后端在 :9100，dev 代理或同源）
+npm run dev      # 本地开发（需 trace-hub 后端在 :9120，dev 代理或同源）
 npm run build    # 产出 ../crates/trace-hub/src/ui/index.html（提交此产物）
 ```
 > `src/ui/index.html` 是**构建产物**（已提交，使 `cargo build` 无需 npm）。改 UI 改 `web/`

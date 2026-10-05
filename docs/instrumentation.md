@@ -13,7 +13,7 @@ custom-utils = { ..., features = ["...", "trace"] }
 ```rust
 // main.rs 启动处（tokio 运行时内）调一次：
 custom_utils::trace::init(custom_utils::trace::TraceConfig::new(
-    std::env::var("TRACE_HUB_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:9100/v1/spans".into()),
+    std::env::var("TRACE_HUB_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:9120/v1/spans".into()),
     "zero", // 本服务名
 ));
 ```
@@ -78,7 +78,7 @@ custom_utils::trace::init(custom_utils::trace::TraceConfig::new(
 
 1. 起 trace-hub（`cargo run -p trace-hub`）。
 2. 服务设 `TRACE_HUB_ENDPOINT` 指向它，跑一条真实流程。
-3. 打开 `http://<trace-hub>:9100/`，按 trace 看主流程+子流程树，点 LLM 节点看 body。
+3. 打开 `http://<trace-hub>:9120/`，按 trace 看主流程+子流程树，点 LLM 节点看 body。
 4. 跨异步：设一个 1 分钟后的 once 闹钟，确认「闹钟触发」子流程挂在**同一条 trace** 下。
 
 ## 注意
